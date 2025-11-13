@@ -20,7 +20,7 @@ Multilevel data refactoring using PMGARD:<br />
 cd build<br />
 mkdir -p refactored_data<br />
 Refactor: ./test/test_mdr_refactor $data_file $num_level $num_bitplanes $num_dims $dim0 $dim1 $dim2<br />
-Retrieval: ./test/test_pdr_reconstructor $data_file $num_tolerance $tolerance_1 ...<br />
+Retrieval: ./test/test_mdr_reconstructor $data_file $num_tolerance $tolerance_1 ...<br />
 
 Precision data refactoring using approximators:<br />
 cd build<br />
