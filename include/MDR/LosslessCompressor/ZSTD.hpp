@@ -2,6 +2,7 @@
 #define _MDR_ZSTD_HPP
 
 #include "zstd.h"
+#include <cstdint>
 
 namespace MDR {
     namespace ZSTD{

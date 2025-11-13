@@ -2,6 +2,7 @@
 #define _MDR_BITPLANE_ENCODER_INTERFACE_HPP
 
 #include <cassert>
+#include <cstdint>
 
 namespace MDR {
     namespace concepts {

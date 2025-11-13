@@ -1,6 +1,8 @@
 #ifndef _MDR_SIZE_INTERPRETER_INTERFACE_HPP
 #define _MDR_SIZE_INTERPRETER_INTERFACE_HPP
 
+#include <cstdint>
+
 namespace MDR {
     namespace concepts {
 
