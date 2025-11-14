@@ -1,5 +1,5 @@
-#ifndef _MDR_NEW_COMPOSED_REFACTOR_HPP
-#define _MDR_NEW_COMPOSED_REFACTOR_HPP
+#ifndef _MDR_ORDERED_REFACTOR_HPP
+#define _MDR_ORDERED_REFACTOR_HPP
 
 #include "RefactorInterface.hpp"
 #include "MDR/Decomposer/Decomposer.hpp"
@@ -149,7 +149,7 @@ namespace MDR {
             std::cout << "Encoder: "; encoder.print();
 
             std::cout << "level_error_bounds: ";
-            for (size_t i = 0; i < level_error_bounds.size(); i++) { std::cout << (int)level_error_bounds[i] << " "; }
+            for (size_t i = 0; i < level_error_bounds.size(); i++) { std::cout << level_error_bounds[i] << " "; }
             std::cout << std::endl;
 
             std::cout << "level_sizes: ";

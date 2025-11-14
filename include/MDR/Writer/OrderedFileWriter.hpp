@@ -1,5 +1,5 @@
-#ifndef _MDR_SERIAL_FILE_WRITER_HPP
-#define _MDR_SERIAL_FILE_WRITER_HPP
+#ifndef _MDR_ORDERED_FILE_WRITER_HPP
+#define _MDR_ORDERED_FILE_WRITER_HPP
 
 #include "WriterInterface.hpp"
 #include <cstdio>

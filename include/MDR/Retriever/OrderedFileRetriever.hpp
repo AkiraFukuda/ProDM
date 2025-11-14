@@ -1,5 +1,5 @@
-#ifndef _MDR_SERIAL_FILE_RETRIEVER_HPP
-#define _MDR_SERIAL_FILE_RETRIEVER_HPP
+#ifndef _MDR_ORDERED_FILE_RETRIEVER_HPP
+#define _MDR_ORDERED_FILE_RETRIEVER_HPP
 
 #include "RetrieverInterface.hpp"
 #include <cstdio>
@@ -51,7 +51,7 @@ namespace MDR {
         ~OrderedFileRetriever(){}
 
         void print() const {
-            std::cout << "Serial file retriever." << std::endl;
+            std::cout << "Ordered file retriever." << std::endl;
         }
     private:
         std::string metadata_file;
