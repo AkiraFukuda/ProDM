@@ -13,7 +13,7 @@ namespace MDR {
             virtual ~WriterInterface() = default;
 
             // virtual std::vector<uint32_t> write_level_components(const std::vector<std::vector<uint8_t*>>& level_components, const std::vector<std::vector<uint32_t>>& level_sizes) const = 0;
-            // virtual uint32_t write_level_components(uint8_t const * data, uint32_t size) const = 0;
+            // virtual uint32_t write_components(uint8_t const * data, uint32_t size) const = 0;
             
             virtual void write_metadata(uint8_t const * metadata, uint32_t size) const = 0;
 

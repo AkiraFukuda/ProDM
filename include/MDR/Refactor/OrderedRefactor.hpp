@@ -97,7 +97,7 @@ namespace MDR {
                 consumed[lev] = j + 1;
             }
 
-            writer.write_level_components(packed.data(), total_size);
+            writer.write_components(packed.data(), total_size);
             
             // level_num.clear();
             // level_num.push_back(1);
@@ -147,32 +147,8 @@ namespace MDR {
             std::cout << "Decomposer: "; decomposer.print();
             std::cout << "Interleaver: "; interleaver.print();
             std::cout << "Encoder: "; encoder.print();
-
-            std::cout << "level_error_bounds: ";
-            for (size_t i = 0; i < level_error_bounds.size(); i++) { std::cout << level_error_bounds[i] << " "; }
-            std::cout << std::endl;
-
-            std::cout << "level_sizes: ";
-            for (size_t i = 0; i < level_sizes.size(); i++) {
-                for (size_t j = 0; j < level_sizes[i].size(); j++) { std::cout << level_sizes[i][j] << " "; }
-                std::cout << std::endl;
-            }
-
-            std::cout << "stopping_indices: ";
-            for (size_t i = 0; i < stopping_indices.size(); i++) { std::cout << (int)stopping_indices[i] << " "; }
-            std::cout << std::endl;
-
-            std::cout << "chunk_order: ";
-            for (size_t i = 0; i < chunk_order.size(); i++) { std::cout << (int)chunk_order[i] << " "; }
-            std::cout << std::endl;
-
-            std::cout << "error_perstep: ";
-            for (size_t i = 0; i < chunk_order.size(); i++) { std::cout << error_perstep[i] << " "; }
-            std::cout << std::endl;
-
         }
     private:
-
         std::vector<uint8_t> get_chunks_order(const std::vector<std::vector<double>>& level_errors, std::vector<double>& error_perstep) const {
             // for(int i=0; i<level_errors.size(); i++){
             //     for(int j=0; j<level_errors[i].size(); j++){

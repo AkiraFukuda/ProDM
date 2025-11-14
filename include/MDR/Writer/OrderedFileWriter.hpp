@@ -1,5 +1,5 @@
-#ifndef _MDR_ORDERED_FILE_WRITER_HPP
-#define _MDR_ORDERED_FILE_WRITER_HPP
+#ifndef _MDR_SERIAL_FILE_WRITER_HPP
+#define _MDR_SERIAL_FILE_WRITER_HPP
 
 #include "WriterInterface.hpp"
 #include <cstdio>
@@ -10,7 +10,7 @@ namespace MDR {
     public:
         OrderedFileWriter(const std::string& metadata_file, const std::string& data_file) : metadata_file(metadata_file), data_file(data_file) {}
 
-        uint32_t write_level_components(uint8_t const * data, uint32_t size) const {
+        uint32_t write_components(uint8_t const * data, uint32_t size) const {
             FILE * file = fopen(data_file.c_str(), "wb");
             fwrite(data, 1, size, file);
             fclose(file);

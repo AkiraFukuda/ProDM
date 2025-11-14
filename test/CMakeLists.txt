@@ -10,3 +10,4 @@ add_my_executable(test_pdr_refactor test_pdr_refactor.cpp)
 add_my_executable(test_pdr_reconstructor test_pdr_reconstructor.cpp)
 
 add_my_executable(test_ord_refactor test_ord_refactor.cpp)
+add_my_executable(test_ord_reconstructor test_ord_reconstructor.cpp)
