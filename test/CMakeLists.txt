@@ -9,5 +9,5 @@ add_my_executable(test_mdr_reconstructor test_mdr_reconstructor.cpp)
 add_my_executable(test_pdr_refactor test_pdr_refactor.cpp)
 add_my_executable(test_pdr_reconstructor test_pdr_reconstructor.cpp)
 
-add_my_executable(test_ord_refactor test_ord_refactor.cpp)
-add_my_executable(test_ord_reconstructor test_ord_reconstructor.cpp)
+add_my_executable(n_read n_read.cpp)
+add_my_executable(n_write n_write.cpp)

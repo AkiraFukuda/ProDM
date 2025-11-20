@@ -8,21 +8,12 @@
 #include "MDR/ErrorEstimator/ErrorEstimator.hpp"
 #include "MDR/ErrorCollector/ErrorCollector.hpp"
 #include "MDR/LosslessCompressor/LevelCompressor.hpp"
+#include "MDR/SizeInterpreter/SizeInterpreter.hpp"
 #include "MDR/Writer/Writer.hpp"
 #include "MDR/RefactorUtils.hpp"
 #include <queue>
 
 namespace MDR {
-    struct UnitErrorGain{
-        double unit_error_gain;
-        int level;
-        UnitErrorGain(double u, int l) : unit_error_gain(u), level(l) {}
-    };
-    struct CompareUnitErrorGain{
-        bool operator()(const UnitErrorGain& u1, const UnitErrorGain& u2){
-            return u1.unit_error_gain < u2.unit_error_gain;
-        }
-    };
 
     // a decomposition-based scientific data refactor: compose a refactor using decomposer, interleaver, encoder, error estimator and error collector
     template<class T, class Decomposer, class Interleaver, class Encoder, class Compressor, class ErrorCollector, class ErrorEstimator, class Writer>
@@ -31,6 +22,87 @@ namespace MDR {
         OrderedRefactor(Decomposer decomposer, Interleaver interleaver, Encoder encoder, Compressor compressor, ErrorCollector collector, ErrorEstimator error_estimator, Writer writer)
             : decomposer(decomposer), interleaver(interleaver), encoder(encoder), compressor(compressor), collector(collector), error_estimator(error_estimator), writer(writer) {}
 
+        void o_refactor(T const* data_, const std::vector<uint32_t>& dims, uint8_t target_level, uint8_t num_bitplanes,
+                uint32_t& metadata_size, uint8_t*& metadata, uint32_t& data_size, uint8_t*& data_in){
+            Timer timer;
+            timer.start();
+            dimensions = dims;
+            uint32_t num_elements = 1;
+            for(const auto& dim:dimensions){
+                num_elements *= dim;
+            }
+            data = std::vector<T>(data_, data_ + num_elements);
+            // if refactor successfully
+            if(refactor(target_level, num_bitplanes)){
+                timer.end();
+                timer.print("Refactor");
+                // timer.start();
+                // level_num = writer.write_level_components(level_components, level_sizes);
+                // timer.end();
+                // timer.print("Write");                
+            }
+
+            // Getting error table
+            std::vector<std::vector<double>> level_abs_errors;
+            std::vector<std::vector<double>>& level_errors = level_squared_errors;
+            if(std::is_base_of<MaxErrorEstimator<T>, ErrorEstimator>::value){
+                std::cout << "Computing absolute error" << std::endl;
+                MaxErrorCollector<T> collector = MaxErrorCollector<T>();
+                for(int i=0; i<=target_level; i++){
+                    auto collected_error = collector.collect_level_error(NULL, 0, level_sizes[i].size(), level_error_bounds[i]);
+                    level_abs_errors.push_back(collected_error);
+                }
+                level_errors = level_abs_errors;
+            }
+            else if(std::is_base_of<SquaredErrorEstimator<T>, ErrorEstimator>::value){
+                std::cout << "Using level squared error directly" << std::endl;
+            }
+            else{
+                std::cerr << "Customized error estimator not supported yet" << std::endl;
+                exit(-1);
+            }
+
+            chunk_order = get_chunks_order(level_errors, error_perstep);
+
+            // writer.write_metadata();
+            metadata = get_metadata(metadata_size);
+
+            // Calculate total size
+            std::vector<uint8_t> consumed(level_sizes.size(), 0);
+            uint64_t total_size_64 = 0;
+            for (uint8_t lev : chunk_order) {
+                uint8_t j = consumed[lev];
+                total_size_64 += level_sizes[lev][j];
+                consumed[lev] = j + 1;
+            }
+
+            // Attention: file size cannot be over 4GB
+            uint32_t total_size = static_cast<uint32_t>(total_size_64);
+
+            std::vector<uint8_t> packed(total_size);
+            uint8_t* dst = packed.data();
+            // copy every chunk
+            std::fill(consumed.begin(), consumed.end(), 0);
+            for (uint8_t lev : chunk_order) {
+                uint8_t j = consumed[lev];
+                uint32_t sz = level_sizes[lev][j];
+                std::memcpy(dst, level_components[lev][j], sz);
+                dst += sz;
+                consumed[lev] = j + 1;
+            }
+
+            // writer.write_components(packed.data(), total_size);
+            data_in = packed.data(); data_size = total_size;
+            
+            // level_num.clear();
+            // level_num.push_back(1);
+            for(int i=0; i<level_components.size(); i++){
+                for(int j=0; j<level_components[i].size(); j++){
+                    free(level_components[i][j]);                    
+                }
+            }
+        }
+        
         void refactor(T const * data_, const std::vector<uint32_t>& dims, uint8_t target_level, uint8_t num_bitplanes){
             Timer timer;
             timer.start();
@@ -70,7 +142,7 @@ namespace MDR {
                 exit(-1);
             }
 
-            chunk_order = get_chunks_order(level_errors, error_perstep);                    
+            chunk_order = get_chunks_order(level_errors, error_perstep);
             write_metadata();
 
             // Calculate total size
@@ -108,8 +180,8 @@ namespace MDR {
             }
         }
 
-        void write_metadata() const {
-            uint32_t metadata_size =
+        uint8_t * get_metadata(uint32_t& metadata_size) const {
+            metadata_size =
                 sizeof(uint8_t)  + get_size(dimensions)
                 + sizeof(uint8_t)  + get_size(level_error_bounds)  
                 + get_size(level_sizes)                            
@@ -135,6 +207,13 @@ namespace MDR {
             p += sizeof(uint16_t);
             serialize(chunk_order, p);
             serialize(error_perstep, p);
+
+            return metadata;
+        }
+
+        void write_metadata() const {
+            uint32_t metadata_size;
+            uint8_t* metadata = get_metadata(metadata_size);
 
             writer.write_metadata(metadata, metadata_size);
             free(metadata);

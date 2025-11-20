@@ -20,6 +20,89 @@ namespace MDR {
         OrderedReconstructor(Decomposer decomposer, Interleaver interleaver, Encoder encoder, Compressor compressor, SizeInterpreter interpreter, Retriever retriever)
             : decomposer(decomposer), interleaver(interleaver), encoder(encoder), compressor(compressor), interpreter(interpreter), retriever(retriever){}
 
+        T * o_reconstruct(double tolerance, const size_t data_size, const uint8_t* data_in, std::vector<uint32_t>& dims){
+            // Timer timer;
+            // timer.start();
+            std::vector<std::vector<double>> level_abs_errors;
+            uint8_t target_level = level_error_bounds.size() - 1;
+            std::vector<std::vector<double>>& level_errors = level_squared_errors;
+            if(std::is_base_of<MaxErrorEstimator<T>, ErrorEstimator>::value){
+                std::cout << "Using absolute error" << std::endl;
+                MaxErrorCollector<T> collector = MaxErrorCollector<T>();
+                for(int i=0; i<=target_level; i++){
+                    auto collected_error = collector.collect_level_error(NULL, 0, level_sizes[i].size(), level_error_bounds[i]);
+                    level_abs_errors.push_back(collected_error);
+                }
+                level_errors = level_abs_errors;
+            }
+            else if(std::is_base_of<SquaredErrorEstimator<T>, ErrorEstimator>::value){
+                std::cout << "Using squared error" << std::endl;
+            }
+            else{
+                std::cerr << "Customized error estimator not supported yet" << std::endl;
+                exit(-1);
+            }
+            // timer.end();
+            // timer.print("Preprocessing");            
+            // timer.start();
+
+            auto prev_level_num_bitplanes(level_num_bitplanes);
+            size_t retrieve_size = 0;
+            size_t prev_num_chunks = num_chunks;
+            for (size_t i = prev_num_chunks; i < chunk_order.size(); i++)
+            {
+                size_t lv = chunk_order[i];
+                size_t sz = level_sizes[lv][level_num_bitplanes[lv]++];
+                chunk_sizes.push_back(sz);
+                retrieve_size += sz;
+                if (error_perstep[i] <= tolerance) {
+                    num_chunks = i + 1;
+                    break;
+                }
+            }
+            uint8_t* ordered_components = retriever.retrieve_components(retrieve_size);
+            size_t offset = 0;
+
+            level_components.clear();
+            level_components = std::vector<std::vector<const uint8_t*>>(level_num.size());
+            
+            for (size_t i = prev_num_chunks; i < num_chunks; i++)
+            {
+                size_t lv = chunk_order[i];
+                level_components[lv].push_back(ordered_components + offset);
+                offset += chunk_sizes[i];
+            }
+                        
+            // check whether to reconstruct to full resolution
+            int skipped_level = 0;
+            for(int i=0; i<=target_level; i++){
+                if(level_num_bitplanes[target_level - i] != 0){
+                    skipped_level = i;
+                    break;
+                }
+            }
+            // TODO: uncomment skip level to reconstruct low resolution data
+            // target_level -= skipped_level;
+            // timer.end();
+            // timer.print("Interpret and retrieval");
+            int reconstruct_level = target_level - skipped_level;
+            // std::cout << "skipped_level = " << skipped_level << ", target_level = " << +target_level << std::endl;
+
+            bool success = reconstruct(reconstruct_level, prev_level_num_bitplanes);
+            retriever.release();
+
+            dims = dimensions;
+
+            if(success){
+                current_level = reconstruct_level;
+                return data.data();
+            }
+            else{
+                std::cerr << "Reconstruct unsuccessful, return NULL pointer" << std::endl;
+                return NULL;
+            }
+        }
+
         // reconstruct data from encoded streams
         T * reconstruct(double tolerance){
             // Timer timer;
@@ -119,6 +202,35 @@ namespace MDR {
             return data.data();
         }
 
+        void retrieve_metadata(uint8_t* metadata){
+            const uint8_t * p = metadata;
+            uint8_t num_dims = *(p++);
+            deserialize(p, num_dims, dimensions);
+            uint8_t num_levels = *(p++);
+            deserialize(p, num_levels, level_error_bounds);
+            deserialize(p, num_levels, level_sizes);
+            deserialize(p, num_levels, stopping_indices);
+            negabinary = (*(p++) != 0);
+
+            uint16_t chunk_num = 0;
+            memcpy(&chunk_num, p, sizeof(uint16_t));
+            p += sizeof(uint16_t);
+            deserialize(p, chunk_num, chunk_order);
+            deserialize(p, chunk_num, error_perstep);
+
+            level_num_bitplanes = std::vector<uint8_t>(num_levels, 0);
+            level_num = std::vector<uint32_t>(num_levels, 1);
+            level_components = std::vector<std::vector<const uint8_t*>>(num_levels);
+            strides = std::vector<uint32_t>(dimensions.size());
+            uint32_t stride = 1;
+            for(int i=dimensions.size()-1; i>=0; i--){
+                strides[i] = stride;
+                stride *= dimensions[i];
+            }
+            data = std::vector<T>(stride, 0);
+            free(metadata);
+        }
+
         void load_metadata(){
             uint8_t * metadata = retriever.load_metadata();
             const uint8_t * p = metadata;
@@ -194,6 +306,7 @@ namespace MDR {
             auto level_elements = compute_level_elements(level_dims, target_level);
             std::vector<uint32_t> dims_dummy(reconstruct_dimensions.size(), 0);
             std::cout << "Test 2" << std::endl;
+            std::cout << "current level =" << (int)current_level << std::endl;
             for(int i=0; i<=current_level; i++){
                 std::cout << "i=" << i << " ";
                 if(level_num_bitplanes[i] - prev_level_num_bitplanes[i] > 0){
@@ -237,9 +350,11 @@ namespace MDR {
                 }
             }
             std::cout << "Test 4" << std::endl;
+            std::cout << "target level =" << (int)target_level << std::endl;
             // std::cout << "decompose to target_level\n";
             // decompose data to target level
             for(int i=current_level+1; i<=target_level; i++){
+                std::cout << "i=" << i << " ";
                 compressor.decompress_level(level_components[i], level_sizes[i], prev_level_num_bitplanes[i], level_num_bitplanes[i] - prev_level_num_bitplanes[i], stopping_indices[i]);
                 int level_exp = 0;
                 if(negabinary) frexp(level_error_bounds[i] / 4, &level_exp);
