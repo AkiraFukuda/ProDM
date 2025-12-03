@@ -20,7 +20,7 @@ void evaluate(const vector<T>& data, const vector<uint32_t>& dims, int target_le
     refactor.refactor(data.data(), dims, target_level, num_bitplanes);
     err = clock_gettime(CLOCK_REALTIME, &end);
     cout << "Refactor time: " << (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec)/(double)1000000000 << "s" << endl;
-    refactor.print();
+    // refactor.print();
 }
 
 template <class T, class Decomposer, class Interleaver, class Encoder, class Compressor, class ErrorCollector, class ErrorEstimator, class Writer>

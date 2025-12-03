@@ -300,31 +300,31 @@ namespace MDR {
             // update with stride
             std::vector<T> cur_data(data);
             memset(data.data(), 0, data.size() * sizeof(T));
-            std::cout << "Test 1" << std::endl;
+            // std::cout << "Test 1" << std::endl;
 
-            std::cout << "current_level = " << current_level << std::endl;
+            // std::cout << "current_level = " << current_level << std::endl;
             auto level_elements = compute_level_elements(level_dims, target_level);
             std::vector<uint32_t> dims_dummy(reconstruct_dimensions.size(), 0);
-            std::cout << "Test 2" << std::endl;
-            std::cout << "current level =" << (int)current_level << std::endl;
+            // std::cout << "Test 2" << std::endl;
+            // std::cout << "current level =" << (int)current_level << std::endl;
             for(int i=0; i<=current_level; i++){
-                std::cout << "i=" << i << " ";
+                // std::cout << "i=" << i << " ";
                 if(level_num_bitplanes[i] - prev_level_num_bitplanes[i] > 0){
-                    std::cout << "Test 2b" << " ";
+                    // std::cout << "Test 2b" << " ";
                     compressor.decompress_level(level_components[i], level_sizes[i], prev_level_num_bitplanes[i], level_num_bitplanes[i] - prev_level_num_bitplanes[i], stopping_indices[i]);
                     int level_exp = 0;
                     if(negabinary) frexp(level_error_bounds[i] / 4, &level_exp);
                     else frexp(level_error_bounds[i], &level_exp);
-                    std::cout << "Test 2c" << " ";
+                    // std::cout << "Test 2c" << " ";
                     auto level_decoded_data = encoder.progressive_decode(level_components[i], level_elements[i], level_exp, prev_level_num_bitplanes[i], level_num_bitplanes[i] - prev_level_num_bitplanes[i], i);
                     compressor.decompress_release();
-                    std::cout << "Test 2d" << std::endl;
+                    // std::cout << "Test 2d" << std::endl;
                     const std::vector<uint32_t>& prev_dims = (i == 0) ? dims_dummy : level_dims[i - 1];
                     interleaver.reposition(level_decoded_data, reconstruct_dimensions, level_dims[i], prev_dims, data.data(), this->strides);
                     free(level_decoded_data);                    
                 }
             }
-            std::cout << "Test 3" << std::endl;
+            // std::cout << "Test 3" << std::endl;
             // decompose data to current level
             if(current_level >= 0){
                 if(current_level) decomposer.recompose(data.data(), current_dimensions, current_level, this->strides);
@@ -349,12 +349,12 @@ namespace MDR {
                     exit(-1);
                 }
             }
-            std::cout << "Test 4" << std::endl;
-            std::cout << "target level =" << (int)target_level << std::endl;
+            // std::cout << "Test 4" << std::endl;
+            // std::cout << "target level =" << (int)target_level << std::endl;
             // std::cout << "decompose to target_level\n";
             // decompose data to target level
             for(int i=current_level+1; i<=target_level; i++){
-                std::cout << "i=" << i << " ";
+                // std::cout << "i=" << i << " ";
                 compressor.decompress_level(level_components[i], level_sizes[i], prev_level_num_bitplanes[i], level_num_bitplanes[i] - prev_level_num_bitplanes[i], stopping_indices[i]);
                 int level_exp = 0;
                 if(negabinary) frexp(level_error_bounds[i] / 4, &level_exp);
@@ -365,7 +365,7 @@ namespace MDR {
                 interleaver.reposition(level_decoded_data, reconstruct_dimensions, level_dims[i], prev_dims, data.data(), this->strides);
                 free(level_decoded_data);                    
             }
-            std::cout << "Test 5" << std::endl;
+            // std::cout << "Test 5" << std::endl;
             if(current_level >= 0){
                 decomposer.recompose(data.data(), reconstruct_dimensions, target_level - current_level, this->strides);                
             }
