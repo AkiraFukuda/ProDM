@@ -20,9 +20,7 @@ namespace MDR {
         OrderedReconstructor(Decomposer decomposer, Interleaver interleaver, Encoder encoder, Compressor compressor, SizeInterpreter interpreter, Retriever retriever)
             : decomposer(decomposer), interleaver(interleaver), encoder(encoder), compressor(compressor), interpreter(interpreter), retriever(retriever){}
 
-        // 从一个内存 buffer 中重构数据：
-        // buffer 格式为:
-        // [metadata_size(uint32_t)][metadata][data]
+        // buffer: [metadata_size(uint32_t)][metadata][data]
         // 其中 metadata 的内部格式与 OrderedRefactor::get_metadata 保持一致
         // 返回重构后的数据指针（指向内部 data.data()）
         T * reconstruct_from_buffer(double tolerance, const uint8_t *buffer)
@@ -32,7 +30,7 @@ namespace MDR {
                 return NULL;
             }
 
-            // ---- 1. 解析 buffer 头部：metadata_size, metadata, data ----
+            // ---- metadata_size, metadata, data ----
             const uint8_t *p = buffer;
             uint32_t metadata_size = 0;
             std::memcpy(&metadata_size, p, sizeof(uint32_t));
@@ -40,8 +38,8 @@ namespace MDR {
             const uint8_t *metadata = p;
             const uint8_t *data_base = p + metadata_size;
 
-            // ---- 2. 从 metadata 初始化内部状态（格式与 load_metadata 完全一致）----
-            // 为了简单和自洽，每次调用都按 metadata 重新初始化状态
+            // ---- load_metadata ----
+            // every time execute it
             {
                 const uint8_t *mp = metadata;
 
@@ -75,13 +73,12 @@ namespace MDR {
                 }
                 data = std::vector<T>(stride, 0);
 
-                // 渐进相关状态重置
                 num_chunks = 0;
                 chunk_sizes.clear();
                 current_level = -1;
             }
 
-            // ---- 3. 和 reconstruct(tolerance) 一样的误差预处理 ----
+            // ----  preprocessing for reconstruct(tolerance) ----
             std::vector<std::vector<double>> level_abs_errors;
             uint8_t target_level =
                 static_cast<uint8_t>(level_error_bounds.size() - 1);
@@ -116,10 +113,10 @@ namespace MDR {
                 exit(-1);
             }
 
-            // ---- 4. 根据 tolerance 决定需要多少个 chunk（与 reconstruct 一致）----
+            // ---- decide how many chunks----
             auto prev_level_num_bitplanes(level_num_bitplanes);
             size_t retrieve_size = 0;
-            size_t prev_num_chunks = num_chunks; // 这里是 0（已在上面重置）
+            size_t prev_num_chunks = num_chunks; // 0
             double best_error = error_perstep.back();
             if (tolerance < best_error) {
                 tolerance = best_error;
@@ -142,7 +139,7 @@ namespace MDR {
                 num_chunks = chunk_order.size();
             }
 
-            // 在 buffer 里，“需要的字节”就是 data_base 开头的 retrieve_size
+            // 在 buffer 里，需要的字节就是 data_base 开头的 retrieve_size
             const uint8_t *ordered_components = data_base;
             size_t offset = 0;
 
@@ -157,7 +154,7 @@ namespace MDR {
                 offset += chunk_sizes[i];
             }
 
-            // ---- 5. 检查是否需要跳过若干 coarse level（和原代码一致）----
+            // ---- 检查是否需要跳过若干 coarse level ----
             int skipped_level = 0;
             for (int i = 0; i <= target_level; i++)
             {
@@ -167,10 +164,9 @@ namespace MDR {
                     break;
                 }
             }
-            // target_level -= skipped_level; // 保持原逻辑：只计算 reconstruct_level
+            // target_level -= skipped_level; 
             int reconstruct_level = target_level - skipped_level;
 
-            // ---- 6. 调用已有的 reconstruct(level, prev_level_num_bitplanes) 完成真正重构 ----
             bool success =
                 reconstruct(static_cast<uint8_t>(reconstruct_level),
                             prev_level_num_bitplanes);
