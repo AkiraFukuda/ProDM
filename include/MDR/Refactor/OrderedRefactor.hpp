@@ -22,87 +22,121 @@ namespace MDR {
         OrderedRefactor(Decomposer decomposer, Interleaver interleaver, Encoder encoder, Compressor compressor, ErrorCollector collector, ErrorEstimator error_estimator, Writer writer)
             : decomposer(decomposer), interleaver(interleaver), encoder(encoder), compressor(compressor), collector(collector), error_estimator(error_estimator), writer(writer) {}
 
-        void o_refactor(T const* data_, const std::vector<uint32_t>& dims, uint8_t target_level, uint8_t num_bitplanes,
-                uint32_t& metadata_size, uint8_t*& metadata, uint32_t& data_size, uint8_t*& data_in){
+        // 将数据 refactor 后打包到一个 buffer 中：
+        // [metadata_size(uint32_t)][metadata][data]
+        // 调用者负责 free 返回的 buffer
+        uint8_t * refactor_to_buffer(T const * data_,
+                                     const std::vector<uint32_t> &dims,
+                                     uint8_t target_level,
+                                     uint8_t num_bitplanes,
+                                     uint32_t &buffer_size)
+        {
             Timer timer;
             timer.start();
             dimensions = dims;
             uint32_t num_elements = 1;
-            for(const auto& dim:dimensions){
+            for (const auto &dim : dimensions)
+            {
                 num_elements *= dim;
             }
             data = std::vector<T>(data_, data_ + num_elements);
-            // if refactor successfully
-            if(refactor(target_level, num_bitplanes)){
+
+            // 先完成分解/编码/压缩
+            if (refactor(target_level, num_bitplanes))
+            {
                 timer.end();
                 timer.print("Refactor");
-                // timer.start();
-                // level_num = writer.write_level_components(level_components, level_sizes);
-                // timer.end();
-                // timer.print("Write");                
             }
 
-            // Getting error table
+            // 和 refactor 中一致：计算误差表
             std::vector<std::vector<double>> level_abs_errors;
-            std::vector<std::vector<double>>& level_errors = level_squared_errors;
-            if(std::is_base_of<MaxErrorEstimator<T>, ErrorEstimator>::value){
+            std::vector<std::vector<double>> &level_errors = level_squared_errors;
+            if (std::is_base_of<MaxErrorEstimator<T>, ErrorEstimator>::value)
+            {
                 std::cout << "Computing absolute error" << std::endl;
                 MaxErrorCollector<T> collector = MaxErrorCollector<T>();
-                for(int i=0; i<=target_level; i++){
-                    auto collected_error = collector.collect_level_error(NULL, 0, level_sizes[i].size(), level_error_bounds[i]);
+                for (int i = 0; i <= target_level; i++)
+                {
+                    auto collected_error =
+                        collector.collect_level_error(NULL, 0,
+                                                      level_sizes[i].size(),
+                                                      level_error_bounds[i]);
                     level_abs_errors.push_back(collected_error);
                 }
                 level_errors = level_abs_errors;
             }
-            else if(std::is_base_of<SquaredErrorEstimator<T>, ErrorEstimator>::value){
+            else if (std::is_base_of<SquaredErrorEstimator<T>, ErrorEstimator>::value)
+            {
                 std::cout << "Using level squared error directly" << std::endl;
             }
-            else{
-                std::cerr << "Customized error estimator not supported yet" << std::endl;
+            else
+            {
+                std::cerr << "Customized error estimator not supported yet"
+                          << std::endl;
                 exit(-1);
             }
 
+            // 计算 chunk 的全局顺序和每步误差
             chunk_order = get_chunks_order(level_errors, error_perstep);
 
-            // writer.write_metadata();
-            metadata = get_metadata(metadata_size);
+            // 生成 metadata（格式保持不变）
+            uint32_t metadata_size = 0;
+            uint8_t *metadata = get_metadata(metadata_size);
 
-            // Calculate total size
+            // 计算 data（压缩块）总大小
             std::vector<uint8_t> consumed(level_sizes.size(), 0);
-            uint64_t total_size_64 = 0;
-            for (uint8_t lev : chunk_order) {
+            uint64_t total_data_size_64 = 0;
+            for (uint8_t lev : chunk_order)
+            {
                 uint8_t j = consumed[lev];
-                total_size_64 += level_sizes[lev][j];
+                total_data_size_64 += level_sizes[lev][j];
                 consumed[lev] = j + 1;
             }
 
-            // Attention: file size cannot be over 4GB
-            uint32_t total_size = static_cast<uint32_t>(total_size_64);
+            // 注意：整体 data 大小不能超过 4GB
+            uint32_t data_size = static_cast<uint32_t>(total_data_size_64);
 
-            std::vector<uint8_t> packed(total_size);
-            uint8_t* dst = packed.data();
-            // copy every chunk
+            // 整个 buffer 的总大小 = sizeof(uint32_t) + metadata + data
+            buffer_size = static_cast<uint32_t>(sizeof(uint32_t)) +
+                          metadata_size + data_size;
+            uint8_t *buffer =
+                static_cast<uint8_t *>(malloc(buffer_size));
+
+            uint8_t *p = buffer;
+
+            // 1) 写入 metadata_size（uint32_t）
+            std::memcpy(p, &metadata_size, sizeof(uint32_t));
+            p += sizeof(uint32_t);
+
+            // 2) 写入 metadata 本体
+            std::memcpy(p, metadata, metadata_size);
+            p += metadata_size;
+
+            // 3) 按 chunk_order 将压缩后的各块依次写入 data 区域
             std::fill(consumed.begin(), consumed.end(), 0);
-            for (uint8_t lev : chunk_order) {
+            for (uint8_t lev : chunk_order)
+            {
                 uint8_t j = consumed[lev];
                 uint32_t sz = level_sizes[lev][j];
-                std::memcpy(dst, level_components[lev][j], sz);
-                dst += sz;
+                std::memcpy(p, level_components[lev][j], sz);
+                p += sz;
                 consumed[lev] = j + 1;
             }
 
-            // writer.write_components(packed.data(), total_size);
-            data_in = packed.data(); data_size = total_size;
-            
-            // level_num.clear();
-            // level_num.push_back(1);
-            for(int i=0; i<level_components.size(); i++){
-                for(int j=0; j<level_components[i].size(); j++){
-                    free(level_components[i][j]);                    
+            // 清理临时资源
+            free(metadata);
+            for (int i = 0; i < static_cast<int>(level_components.size()); i++)
+            {
+                for (int j = 0; j < static_cast<int>(level_components[i].size());
+                     j++)
+                {
+                    free(level_components[i][j]);
                 }
             }
+
+            return buffer;
         }
-        
+
         void refactor(T const * data_, const std::vector<uint32_t>& dims, uint8_t target_level, uint8_t num_bitplanes){
             Timer timer;
             timer.start();
