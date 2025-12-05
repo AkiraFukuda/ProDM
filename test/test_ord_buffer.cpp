@@ -14,12 +14,12 @@ using namespace std;
 bool negabinary = true;
 
 template <class T, class Refactor>
-uint8_t *evaluate_refactor_to_buffer(const vector<T> &data,
+uint32_t evaluate_refactor_to_buffer(const vector<T> &data,
                                      const vector<uint32_t> &dims,
                                      int target_level,
                                      int num_bitplanes,
                                      Refactor &refactor,
-                                     uint32_t &buffer_size)
+                                     uint8_t *buffer)
 {
     struct timespec start, end;
     int err = 0;
@@ -28,11 +28,11 @@ uint8_t *evaluate_refactor_to_buffer(const vector<T> &data,
     err = clock_gettime(CLOCK_REALTIME, &start);
     (void)err;
 
-    uint8_t *buffer =
+    uint32_t buffer_size =
         refactor.refactor_to_buffer(data.data(), dims,
                                     static_cast<uint8_t>(target_level),
                                     static_cast<uint8_t>(num_bitplanes),
-                                    buffer_size);
+                                    buffer);
 
     err = clock_gettime(CLOCK_REALTIME, &end);
     double t =
@@ -42,7 +42,7 @@ uint8_t *evaluate_refactor_to_buffer(const vector<T> &data,
     cout << "Refactor time: " << t << "s" << endl;
     cout << "Buffer size = " << buffer_size << " bytes" << endl;
 
-    return buffer;
+    return buffer_size;
 }
 
 template <class T, class Reconstructor>
@@ -106,13 +106,11 @@ void test_buffer(string filename,
                  Writer writer,
                  Retriever retriever)
 {
-    // 读取原始数据
     size_t num_elements = 0;
     auto data = MGARD::readfile<T>(filename.c_str(), num_elements);
     cout << "read file done: #element = " << num_elements << endl;
     fflush(stdout);
 
-    // 构造 OrderedRefactor（Writer 仍然传进来，但不会用于文件写）
     auto refactor =
         MDR::OrderedRefactor<T, Decomposer, Interleaver, Encoder,
                              Compressor, ErrorCollector, ErrorEstimator, Writer>(
@@ -120,12 +118,11 @@ void test_buffer(string filename,
             compressor, collector, estimator, writer);
     refactor.negabinary = negabinary;
 
-    // 在内存中做 refactor，得到 buffer
-    uint32_t buffer_size = 0;
-    uint8_t *buffer = evaluate_refactor_to_buffer<T>(
-        data, dims, target_level, num_bitplanes, refactor, buffer_size);
+    uint32_t estimated_data_size = num_elements * sizeof(T) * 2 + 1024;
+    uint8_t * buffer = (uint8_t*)malloc(sizeof(uint8_t) * estimated_data_size);
+    uint32_t buffer_size = evaluate_refactor_to_buffer<T>(
+        data, dims, target_level, num_bitplanes, refactor, buffer);
 
-    // 构造 OrderedReconstructor（Retriever 传一个占位对象即可）
     auto reconstructor =
         MDR::OrderedReconstructor<T, Decomposer, Interleaver, Encoder,
                                   Compressor, SizeInterpreter, ErrorEstimator,
@@ -133,11 +130,9 @@ void test_buffer(string filename,
             decomposer, interleaver, encoder,
             compressor, interpreter, retriever);
 
-    // 从同一个 buffer 上做多次重构测试
     evaluate_reconstruct_from_buffer<T>(data, tolerance,
                                         reconstructor, buffer);
 
-    // 释放 buffer
     free(buffer);
 }
 

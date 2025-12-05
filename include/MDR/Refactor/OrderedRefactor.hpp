@@ -22,14 +22,13 @@ namespace MDR {
         OrderedRefactor(Decomposer decomposer, Interleaver interleaver, Encoder encoder, Compressor compressor, ErrorCollector collector, ErrorEstimator error_estimator, Writer writer)
             : decomposer(decomposer), interleaver(interleaver), encoder(encoder), compressor(compressor), collector(collector), error_estimator(error_estimator), writer(writer) {}
 
-        // 将数据 refactor 后打包到一个 buffer 中：
-        // [metadata_size(uint32_t)][metadata][data]
-        // 调用者负责 free 返回的 buffer
-        uint8_t * refactor_to_buffer(T const * data_,
+        // buffer: [metadata_size(uint32_t)][metadata][data]
+        // return buffer size
+        uint32_t refactor_to_buffer(T const * data_,
                                      const std::vector<uint32_t> &dims,
                                      uint8_t target_level,
                                      uint8_t num_bitplanes,
-                                     uint32_t &buffer_size)
+                                     uint8_t * buffer)
         {
             Timer timer;
             timer.start();
@@ -41,14 +40,12 @@ namespace MDR {
             }
             data = std::vector<T>(data_, data_ + num_elements);
 
-            // 先完成分解/编码/压缩
             if (refactor(target_level, num_bitplanes))
             {
                 timer.end();
                 timer.print("Refactor");
             }
 
-            // 和 refactor 中一致：计算误差表
             std::vector<std::vector<double>> level_abs_errors;
             std::vector<std::vector<double>> &level_errors = level_squared_errors;
             if (std::is_base_of<MaxErrorEstimator<T>, ErrorEstimator>::value)
@@ -76,14 +73,13 @@ namespace MDR {
                 exit(-1);
             }
 
-            // 计算 chunk 的全局顺序和每步误差
             chunk_order = get_chunks_order(level_errors, error_perstep);
 
-            // 生成 metadata（格式保持不变）
+            // metadata
             uint32_t metadata_size = 0;
             uint8_t *metadata = get_metadata(metadata_size);
 
-            // 计算 data（压缩块）总大小
+            // calculate data size
             std::vector<uint8_t> consumed(level_sizes.size(), 0);
             uint64_t total_data_size_64 = 0;
             for (uint8_t lev : chunk_order)
@@ -93,26 +89,30 @@ namespace MDR {
                 consumed[lev] = j + 1;
             }
 
-            // 注意：整体 data 大小不能超过 4GB
+            // 64 bit to 32 bit
             uint32_t data_size = static_cast<uint32_t>(total_data_size_64);
 
-            // 整个 buffer 的总大小 = sizeof(uint32_t) + metadata + data
-            buffer_size = static_cast<uint32_t>(sizeof(uint32_t)) +
+            // buffer size = sizeof(uint32_t) + metadata + data
+            uint32_t buffer_size = static_cast<uint32_t>(sizeof(uint32_t)) +
                           metadata_size + data_size;
-            uint8_t *buffer =
-                static_cast<uint8_t *>(malloc(buffer_size));
 
+            // buffer shoule be already allocated
             uint8_t *p = buffer;
+            if (!buffer) {
+                std::cerr << "Buffer not allocated"
+                          << std::endl;
+                exit(-1);
+            }
 
-            // 1) 写入 metadata_size（uint32_t）
+            // write metadata_size（uint32_t）
             std::memcpy(p, &metadata_size, sizeof(uint32_t));
             p += sizeof(uint32_t);
 
-            // 2) 写入 metadata 本体
+            // write metadata
             std::memcpy(p, metadata, metadata_size);
             p += metadata_size;
 
-            // 3) 按 chunk_order 将压缩后的各块依次写入 data 区域
+            // write compressed data by chunk_order
             std::fill(consumed.begin(), consumed.end(), 0);
             for (uint8_t lev : chunk_order)
             {
@@ -123,7 +123,6 @@ namespace MDR {
                 consumed[lev] = j + 1;
             }
 
-            // 清理临时资源
             free(metadata);
             for (int i = 0; i < static_cast<int>(level_components.size()); i++)
             {
@@ -134,7 +133,7 @@ namespace MDR {
                 }
             }
 
-            return buffer;
+            return buffer_size;
         }
 
         void refactor(T const * data_, const std::vector<uint32_t>& dims, uint8_t target_level, uint8_t num_bitplanes){

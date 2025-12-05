@@ -21,8 +21,7 @@ namespace MDR {
             : decomposer(decomposer), interleaver(interleaver), encoder(encoder), compressor(compressor), interpreter(interpreter), retriever(retriever){}
 
         // buffer: [metadata_size(uint32_t)][metadata][data]
-        // 其中 metadata 的内部格式与 OrderedRefactor::get_metadata 保持一致
-        // 返回重构后的数据指针（指向内部 data.data()）
+        // return reconstructed data.data()
         T * reconstruct_from_buffer(double tolerance, const uint8_t *buffer)
         {
             if(buffer == NULL){
@@ -39,7 +38,7 @@ namespace MDR {
             const uint8_t *data_base = p + metadata_size;
 
             // ---- load_metadata ----
-            // every time execute it
+            // every time we execute it
             {
                 const uint8_t *mp = metadata;
 
@@ -104,7 +103,6 @@ namespace MDR {
                                      ErrorEstimator>::value)
             {
                 std::cout << "Using squared error" << std::endl;
-                // level_squared_errors 应该在另外的路径中被填充
             }
             else
             {
@@ -139,7 +137,7 @@ namespace MDR {
                 num_chunks = chunk_order.size();
             }
 
-            // 在 buffer 里，需要的字节就是 data_base 开头的 retrieve_size
+            // bytes needed are retrieve_size started by data_base
             const uint8_t *ordered_components = data_base;
             size_t offset = 0;
 
@@ -154,7 +152,7 @@ namespace MDR {
                 offset += chunk_sizes[i];
             }
 
-            // ---- 检查是否需要跳过若干 coarse level ----
+            // ---- check if should skip coarse level ----
             int skipped_level = 0;
             for (int i = 0; i <= target_level; i++)
             {
