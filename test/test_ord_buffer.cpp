@@ -118,7 +118,8 @@ void test_buffer(string filename,
             compressor, collector, estimator, writer);
     refactor.negabinary = negabinary;
 
-    uint32_t estimated_data_size = num_elements * sizeof(T) * 2 + 1024;
+    uint32_t estimated_data_size = num_elements * sizeof(T) + 1024;
+    cout << "Allocated size = " << estimated_data_size << endl;
     uint8_t * buffer = (uint8_t*)malloc(sizeof(uint8_t) * estimated_data_size);
     uint32_t buffer_size = evaluate_refactor_to_buffer<T>(
         data, dims, target_level, num_bitplanes, refactor, buffer);
