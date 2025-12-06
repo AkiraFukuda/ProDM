@@ -125,6 +125,9 @@ namespace MDR {
             if (tolerance < best_error) {
                 tolerance = best_error;
             }
+            if (prev_num_chunks > 0 && error_perstep[prev_num_chunks - 1] <= tolerance) {
+                return data.data();
+            }
 
             for (size_t i = prev_num_chunks; i < chunk_order.size(); i++)
             {
@@ -143,10 +146,6 @@ namespace MDR {
 
             if (retrieve_size > 0 && num_chunks == prev_num_chunks) {
                 num_chunks = static_cast<uint16_t>(chunk_order.size());
-            }
-
-            if (num_chunks == prev_num_chunks) {
-                return data.data();
             }
 
             const uint8_t *ordered_components = data_base_from_buffer;
@@ -227,6 +226,9 @@ namespace MDR {
             double best_error = error_perstep.back();
             if (tolerance < best_error) {
                 tolerance = best_error;
+            }
+            if (prev_num_chunks > 0 && error_perstep[prev_num_chunks - 1] <= tolerance) {
+                return data.data();
             }
 
             for (size_t i = prev_num_chunks; i < chunk_order.size(); i++)
