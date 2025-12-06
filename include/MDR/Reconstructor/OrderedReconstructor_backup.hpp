@@ -20,107 +20,101 @@ namespace MDR {
         OrderedReconstructor(Decomposer decomposer, Interleaver interleaver, Encoder encoder, Compressor compressor, SizeInterpreter interpreter, Retriever retriever)
             : decomposer(decomposer), interleaver(interleaver), encoder(encoder), compressor(compressor), interpreter(interpreter), retriever(retriever){}
 
+        // buffer: [metadata_size(uint32_t)][metadata][data]
+        // return reconstructed data.data()
         T * reconstruct_from_buffer(double tolerance, const uint8_t *buffer)
         {
-            if (!buffer_initialized) {
-                if (buffer == NULL) {
-                    std::cerr << "reconstruct_from_buffer: buffer is NULL" << std::endl;
-                    return NULL;
-                }
-                buffer_base = buffer;
-                const uint8_t *p = buffer_base;
+            if(buffer == NULL){
+                std::cerr << "reconstruct_from_buffer: buffer is NULL" << std::endl;
+                return NULL;
+            }
 
-                // get metadata_size
-                std::memcpy(&metadata_size_from_buffer, p, sizeof(uint32_t));
-                p += sizeof(uint32_t);
+            // ---- metadata_size, metadata, data ----
+            const uint8_t *p = buffer;
+            uint32_t metadata_size = 0;
+            std::memcpy(&metadata_size, p, sizeof(uint32_t));
+            p += sizeof(uint32_t);
+            const uint8_t *metadata = p;
+            const uint8_t *data_base = p + metadata_size;
 
-                const uint8_t *metadata = p;
-                data_base_from_buffer = p + metadata_size_from_buffer;
+            // ---- load_metadata ----
+            // every time we execute it
+            {
+                const uint8_t *mp = metadata;
 
-                // ---- get metadata and initialize the structure ----
+                uint8_t num_dims = *(mp++);
+                deserialize(mp, num_dims, dimensions);
+
+                uint8_t num_levels = *(mp++);
+                deserialize(mp, num_levels, level_error_bounds);
+                deserialize(mp, num_levels, level_sizes);
+                deserialize(mp, num_levels, stopping_indices);
+
+                negabinary = (*(mp++) != 0);
+
+                uint16_t chunk_num = 0;
+                std::memcpy(&chunk_num, mp, sizeof(uint16_t));
+                mp += sizeof(uint16_t);
+                deserialize(mp, chunk_num, chunk_order);
+                deserialize(mp, chunk_num, error_perstep);
+
+                level_num_bitplanes = std::vector<uint8_t>(num_levels, 0);
+                level_num           = std::vector<uint32_t>(num_levels, 1);
+                level_components    =
+                    std::vector<std::vector<const uint8_t *>>(num_levels);
+
+                strides = std::vector<uint32_t>(dimensions.size());
+                uint32_t stride = 1;
+                for (int i = static_cast<int>(dimensions.size()) - 1; i >= 0; i--)
                 {
-                    const uint8_t *mp = metadata;
-
-                    uint8_t num_dims = *(mp++);
-                    deserialize(mp, num_dims, dimensions);
-
-                    uint8_t num_levels = *(mp++);
-                    deserialize(mp, num_levels, level_error_bounds);
-                    deserialize(mp, num_levels, level_sizes);
-                    deserialize(mp, num_levels, stopping_indices);
-
-                    negabinary = (*(mp++) != 0);
-
-                    uint16_t chunk_num = 0;
-                    std::memcpy(&chunk_num, mp, sizeof(uint16_t));
-                    mp += sizeof(uint16_t);
-                    deserialize(mp, chunk_num, chunk_order);
-                    deserialize(mp, chunk_num, error_perstep);
-
-                    // progressive
-                    level_num_bitplanes = std::vector<uint8_t>(num_levels, 0);
-                    level_num           = std::vector<uint32_t>(num_levels, 1);
-                    level_components    =
-                        std::vector<std::vector<const uint8_t *>>(num_levels);
-
-                    strides = std::vector<uint32_t>(dimensions.size());
-                    uint32_t stride = 1;
-                    for (int i = static_cast<int>(dimensions.size()) - 1; i >= 0; i--) {
-                        strides[i] = stride;
-                        stride *= dimensions[i];
-                    }
-                    data = std::vector<T>(stride, 0);
-
-                    num_chunks = 0;
-                    chunk_sizes.clear();
-                    current_level = -1;
+                    strides[i] = stride;
+                    stride *= dimensions[i];
                 }
+                data = std::vector<T>(stride, 0);
 
-                buffer_initialized = true;
-            } else {
-                if (buffer != NULL && buffer != buffer_base) {
-                    std::cerr << "reconstruct_from_buffer: buffer pointer changed, "
-                                "progressive reconstruction assumes same buffer!"
-                            << std::endl;
-                }
+                num_chunks = 0;
+                chunk_sizes.clear();
+                current_level = -1;
             }
 
-            if (!error_preprocessed) {
-                std::vector<std::vector<double>> level_abs_errors;
-                uint8_t target_level =
-                    static_cast<uint8_t>(level_error_bounds.size() - 1);
-                std::vector<std::vector<double>> &level_errors =
-                    level_squared_errors;
+            // ----  preprocessing for reconstruct(tolerance) ----
+            std::vector<std::vector<double>> level_abs_errors;
+            uint8_t target_level =
+                static_cast<uint8_t>(level_error_bounds.size() - 1);
+            std::vector<std::vector<double>> &level_errors =
+                level_squared_errors;
 
-                if (std::is_base_of<MaxErrorEstimator<T>, ErrorEstimator>::value) {
-                    std::cout << "Using absolute error" << std::endl;
-                    MaxErrorCollector<T> collector = MaxErrorCollector<T>();
-                    level_abs_errors.clear();
-                    for (int i = 0; i <= target_level; i++) {
-                        auto collected_error =
-                            collector.collect_level_error(NULL, 0,
-                                                        level_sizes[i].size(),
-                                                        level_error_bounds[i]);
-                        level_abs_errors.push_back(collected_error);
-                    }
-                    level_errors = level_abs_errors;
+            if (std::is_base_of<MaxErrorEstimator<T>, ErrorEstimator>::value)
+            {
+                std::cout << "Using absolute error" << std::endl;
+                MaxErrorCollector<T> collector = MaxErrorCollector<T>();
+                level_abs_errors.clear();
+                for (int i = 0; i <= target_level; i++)
+                {
+                    auto collected_error =
+                        collector.collect_level_error(NULL, 0,
+                                                      level_sizes[i].size(),
+                                                      level_error_bounds[i]);
+                    level_abs_errors.push_back(collected_error);
                 }
-                else if (std::is_base_of<SquaredErrorEstimator<T>, ErrorEstimator>::value) {
-                    std::cout << "Using squared error" << std::endl;
-                }
-                else {
-                    std::cerr << "Customized error estimator not supported yet"
-                            << std::endl;
-                    exit(-1);
-                }
-
-                error_preprocessed = true;
+                level_errors = level_abs_errors;
+            }
+            else if (std::is_base_of<SquaredErrorEstimator<T>,
+                                     ErrorEstimator>::value)
+            {
+                std::cout << "Using squared error" << std::endl;
+            }
+            else
+            {
+                std::cerr << "Customized error estimator not supported yet"
+                          << std::endl;
+                exit(-1);
             }
 
-            // ---------- add chunks based on tolerance ----------
+            // ---- decide how many chunks----
             auto prev_level_num_bitplanes(level_num_bitplanes);
             size_t retrieve_size = 0;
-            size_t prev_num_chunks = num_chunks; // 0 for non-progressive
+            size_t prev_num_chunks = num_chunks; // 0
             double best_error = error_perstep.back();
             if (tolerance < best_error) {
                 tolerance = best_error;
@@ -128,8 +122,7 @@ namespace MDR {
 
             for (size_t i = prev_num_chunks; i < chunk_order.size(); i++)
             {
-                size_t lv =
-                    chunk_order[i];
+                size_t lv = chunk_order[i];
                 size_t sz =
                     level_sizes[lv][level_num_bitplanes[lv]++];
                 chunk_sizes.push_back(static_cast<uint32_t>(sz));
@@ -139,60 +132,55 @@ namespace MDR {
                     num_chunks = static_cast<uint16_t>(i + 1);
                     break;
                 }
-            }
-
+            }            
             if (retrieve_size > 0 && num_chunks == prev_num_chunks) {
-                num_chunks = static_cast<uint16_t>(chunk_order.size());
+                num_chunks = chunk_order.size();
             }
 
-            if (num_chunks == prev_num_chunks) {
-                return data.data();
-            }
-
-            const uint8_t *ordered_components = data_base_from_buffer;
-
-            // skip used chunks 
+            // bytes needed are retrieve_size started by data_base
+            const uint8_t *ordered_components = data_base;
             size_t offset = 0;
-            for (size_t i = 0; i < prev_num_chunks; ++i) {
-                offset += chunk_sizes[i];
-            }
 
-            // only need to save newly added chunks
             level_components.clear();
             level_components =
                 std::vector<std::vector<const uint8_t *>>(level_num.size());
 
-            for (size_t i = prev_num_chunks; i < num_chunks; i++) {
+            for (size_t i = prev_num_chunks; i < num_chunks; i++)
+            {
                 size_t lv = chunk_order[i];
                 level_components[lv].push_back(ordered_components + offset);
                 offset += chunk_sizes[i];
             }
 
-            uint8_t target_level =
-                static_cast<uint8_t>(level_error_bounds.size() - 1);
+            // ---- check if should skip coarse level ----
             int skipped_level = 0;
-            for (int i = 0; i <= target_level; i++) {
-                if (level_num_bitplanes[target_level - i] != 0) {
+            for (int i = 0; i <= target_level; i++)
+            {
+                if (level_num_bitplanes[target_level - i] != 0)
+                {
                     skipped_level = i;
                     break;
                 }
             }
-            int reconstruct_level = static_cast<int>(target_level) - skipped_level;
+            // target_level -= skipped_level; 
+            int reconstruct_level = target_level - skipped_level;
 
             bool success =
                 reconstruct(static_cast<uint8_t>(reconstruct_level),
                             prev_level_num_bitplanes);
 
-            if (success) {
+            if (success)
+            {
                 current_level = reconstruct_level;
                 return data.data();
-            } else {
+            }
+            else
+            {
                 std::cerr << "Reconstruct unsuccessful, return NULL pointer"
-                        << std::endl;
+                          << std::endl;
                 return NULL;
             }
         }
-
 
         // reconstruct data from encoded streams
         T * reconstruct(double tolerance){
@@ -514,13 +502,6 @@ namespace MDR {
         std::vector<uint8_t> chunk_order;
         std::vector<double> error_perstep;
         std::vector<uint32_t> chunk_sizes;
-
-        bool buffer_initialized = false;          // 是否已经解析过 buffer 的 metadata
-        bool error_preprocessed = false;         // 是否已经做过误差预处理
-        const uint8_t *buffer_base = nullptr;    // 整个 buffer 的起始地址
-        const uint8_t *data_base_from_buffer = nullptr; // data 区起始地址
-        uint32_t metadata_size_from_buffer = 0;  // 记录 metadata 大小（可选）
-
     };
 }
 #endif
