@@ -30,6 +30,7 @@ namespace MDR {
                 n = (n >> 1) + 1;
             }
         }
+        std::cout << "Compute level dims success\n";
         return level_dims;
     }
 
@@ -55,6 +56,7 @@ namespace MDR {
             level_elements[i] = num_elements - pre_num_elements;
             pre_num_elements = num_elements;
         }
+        std::cout << "Compute level elements success\n";
         return level_elements;
     }
 

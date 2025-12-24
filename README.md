@@ -8,9 +8,9 @@ Collaborators: Dr. Scott Klasky (ORNL), Dr. Qian Gong (ORNL), Dr. Jill Zhang (LL
 
 # Installation
 
-One-command compilation using "sh build_script.sh". It will automatically builds ProDM libaray and the dependencies.
+One-command compilation using "sh build_script.sh". It will automatically builds ProDM library and the dependencies.
 
-git clone https://https://github.com/lxAltria/ProDM.git<br />
+git clone https://github.com/lxAltria/ProDM.git<br />
 cd ProDM<br />
 sh build_script.sh<br />
 
@@ -20,7 +20,13 @@ Multilevel data refactoring using PMGARD:<br />
 cd build<br />
 mkdir -p refactored_data<br />
 Refactor: ./test/test_mdr_refactor $data_file $num_level $num_bitplanes $num_dims $dim0 $dim1 $dim2<br />
-Retrieval: ./test/test_pdr_reconstructor $data_file $num_tolerance $tolerance_1 ...<br />
+Retrieval: ./test/test_mdr_reconstructor $data_file $num_tolerance $tolerance_1 ...<br />
+
+Ordered multilevel data refactoring using PMGARD:<br />
+cd build<br />
+mkdir -p refactored_data<br />
+Refactor: ./test/test_ord_refactor $data_file $num_level $num_bitplanes $num_dims $dim0 $dim1 $dim2<br />
+Retrieval: ./test/test_ord_reconstructor $data_file $num_tolerance $tolerance_1 ...<br />
 
 Precision data refactoring using approximators:<br />
 cd build<br />
@@ -30,4 +36,4 @@ Retrieval: ./test/test_pdr_reconstructor $data_file $num_tolerance $tolerance_1 
 
 # Q&A
 
-Please address your questions to xliang@uky.edu with subject title ProDM<br />
+Please address your questions to xliang@uky.edu with subject title ProDM.<br />

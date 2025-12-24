@@ -23,7 +23,7 @@ namespace MDR {
                     std::cerr << "Errors in fseek while retrieving from file" << std::endl;
                 }
                 uint8_t * buffer = (uint8_t *) malloc(retrieve_sizes[i]);
-                fread(buffer, sizeof(uint8_t), retrieve_sizes[i], file);
+                int flag = fread(buffer, sizeof(uint8_t), retrieve_sizes[i], file);
                 concated_level_components.push_back(buffer);
                 fclose(file);
                 offsets[i] += retrieve_sizes[i];
@@ -40,7 +40,7 @@ namespace MDR {
             uint32_t num_bytes = ftell(file);
             rewind(file);
             uint8_t * metadata = (uint8_t *) malloc(num_bytes);
-            fread(metadata, 1, num_bytes, file);
+            int flag = fread(metadata, 1, num_bytes, file);
             fclose(file);
             return metadata;
         }
