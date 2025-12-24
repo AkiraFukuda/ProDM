@@ -10,7 +10,7 @@ Collaborators: Dr. Scott Klasky (ORNL), Dr. Qian Gong (ORNL), Dr. Jill Zhang (LL
 
 One-command compilation using "sh build_script.sh". It will automatically builds ProDM library and the dependencies.
 
-git clone https://https://github.com/lxAltria/ProDM.git<br />
+git clone https://github.com/lxAltria/ProDM.git<br />
 cd ProDM<br />
 sh build_script.sh<br />
 
